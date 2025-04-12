@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Interaktiver Kalender</title>
+  <style>
+    :root {
+      --bg: #f0f4f8;
+      --text: #333;
+      --accent: #2a9d8f;
+      --card: #fff;
+    }
+
+    body.dark {
+      --bg: #1e1e1e;
+      --text: #e0e0e0;
+      --accent: #90caf9;
+      --card: #2c2c2c;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 2rem;
+      transition: 0.3s;
+    }
+
+    h1 {
+      text-align: center;
+      color: var(--accent);
+    }
+
+    #calendar {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 0.5rem;
+      max-width: 800px;
+      margin: 2rem auto;
+    }
+
+    .day {
+      background: var(--card);
+      border-radius: 10px;
+      padding: 1rem;
+      text-align: center;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .day:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .day.has-reminder::after {
+      content: "🔔";
+      position: absolute;
+      top: 5px;
+      right: 8px;
+    }
+
+    #controls {
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      margin: 0.5rem;
+      cursor: pointer;
+    }
+
+    #details {
+      max-width: 600px;
+      margin: 2rem auto;
+      background: var(--card);
+      padding: 1rem;
+      border-radius: 10px;
+    }
+
+    input[type="time"], input[type="text"], textarea {
+      padding: 0.4rem;
+      margin: 0.5rem 0;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--text);
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    #toggle-darkmode {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: none;
+      border: 2px solid var(--accent);
+      color: var(--accent);
+      border-radius: 6px;
+      padding: 0.4rem 0.8rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <button id="toggle-darkmode">🌙 Dark Mode</button>
+  <h1>📅 Interaktiver Kalender</h1>
+  <div id="controls">
+    <button onclick="changeMonth(-1)">⏪ Zurück</button>
+    <span id="month-year"></span>
+    <button onclick="changeMonth(1)">⏩ Weiter</button>
+  </div>
+  <div id="calendar"></div>
+  <div id="details"><strong>Wähle einen Tag, um Erinnerungen hinzuzufügen.</strong></div>
+
+  <script>
+    let reminders = JSON.parse(localStorage.getItem("reminders")) || [];
+    let notes = JSON.parse(localStorage.getItem("notes")) || {};
+    const calendarEl = document.getElementById("calendar");
+    const monthYearEl = document.getElementById("month-year");
+    const detailsEl = document.getElementById("details");
+    let currentDate = new Date();
+
+    function saveReminders() {
+      localStorage.setItem("reminders", JSON.stringify(reminders));
+    }
+
+    function saveNotes() {
+      localStorage.setItem("notes", JSON.stringify(notes));
+    }
+
+    function getRemindersForDay(date) {
+      return reminders.filter(r => {
+        const rDate = new Date(r.time);
+        return (
+          rDate.getFullYear() === date.getFullYear() &&
+          rDate.getMonth() === date.getMonth() &&
+          rDate.getDate() === date.getDate()
+        );
+      });
+    }
+
+    function getNoteForDay(date) {
+      return notes[date.toISOString()] || '';
+    }
+
+    function renderCalendar() {
+      calendarEl.innerHTML = "";
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      monthYearEl.textContent = currentDate.toLocaleString('de-DE', { month: 'long', year: 'numeric' });
+
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const startDay = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
+
+      for (let i = 0; i < startDay; i++) {
+        const empty = document.createElement("div");
+        calendarEl.appendChild(empty);
+      }
+
+      for (let day = 1; day <= lastDay.getDate(); day++) {
+        const date = new Date(year, month, day);
+        const div = document.createElement("div");
+        div.className = "day";
+        div.textContent = day;
+
+        const todaysReminders = getRemindersForDay(date);
+        if (todaysReminders.length > 0) {
+          div.classList.add("has-reminder");
+        }
+
+        div.onclick = () => {
+          showDetails(date);
+        };
+
+        calendarEl.appendChild(div);
+      }
+    }
+
+    function showDetails(date) {
+      const list = getRemindersForDay(date);
+      const dateStr = date.toLocaleDateString("de-DE");
+      const note = getNoteForDay(date);
+
+      let html = `<strong>${dateStr}</strong>`;
+      html += list.length
+        ? "<ul>" + list.map((r, index) =>
+            `<li>${new Date(r.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}: ${r.message}
+            <button class="delete-reminder" data-time="${r.time}">Löschen</button></li>`
+          ).join("") + "</ul>"
+        : "<p>Keine Erinnerungen.</p>";
+
+      html += `
+        <h4>Neue Erinnerung hinzufügen:</h4>
+        <input type="time" id="new-time" />
+        <input type="text" id="new-msg" placeholder="Erinnerung..." />
+        <button onclick="addReminderForDay('${date.toISOString()}')">Speichern</button>
+      `;
+
+      html += `
+        <h4>Notiz hinzufügen:</h4>
+        <textarea id="new-note" placeholder="Schreibe eine Notiz...">${note}</textarea>
+        <button onclick="addNoteForDay('${date.toISOString()}')">Notiz speichern</button>
+      `;
+
+      detailsEl.innerHTML = html;
+
+      const deleteButtons = document.querySelectorAll('.delete-reminder');
+      deleteButtons.forEach(button => {
+        button.addEventListener('click', (e) => {
+          const time = e.target.getAttribute('data-time');
+          deleteReminder(time);
+        });
+      });
+    }
+
+    function addReminderForDay(isoDate) {
+      const time = document.getElementById("new-time").value;
+      const msg = document.getElementById("new-msg").value;
+
+      if (!time || !msg) {
+        alert("Bitte Zeit und Nachricht eingeben!");
+        return;
+      }
+
+      const base = new Date(isoDate);
+      const [hours, minutes] = time.split(":");
+      base.setHours(+hours, +minutes);
+
+      reminders.push({ time: base.toISOString(), message: msg });
+      saveReminders();
+      renderCalendar();
+      showDetails(base);
+    }
+
+    function addNoteForDay(isoDate) {
+      const note = document.getElementById("new-note").value;
+
+      notes[isoDate] = note; 
+      saveNotes();
+      showDetails(new Date(isoDate));
+    }
+
+    function deleteReminder(time) {
+      reminders = reminders.filter(r => r.time !== time);
+      saveReminders();
+      renderCalendar();
+      detailsEl.innerHTML = "<strong>Wähle einen Tag, um Erinnerungen hinzuzufügen.</strong>";
+    }
+
+    function changeMonth(diff) {
+      currentDate.setMonth(currentDate.getMonth() + diff);
+      renderCalendar();
+    }
+
+    const toggleBtn = document.getElementById("toggle-darkmode");
+    const prefersDark = localStorage.getItem("darkmode") === "true";
+
+    if (prefersDark) {
+      document.body.classList.add("dark");
+      toggleBtn.textContent = "🌞 Light Mode";
+    }
+
+    toggleBtn.onclick = () => {
+      document.body.classList.toggle("dark");
+      const isDark = document.body.classList.contains("dark");
+      localStorage.setItem("darkmode", isDark);
+      toggleBtn.textContent = isDark ? "🌞 Light Mode" : "🌙 Dark Mode";
+    };
+
+    renderCalendar();
+  </script>
+</body>
+</html>
